@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, nextTick, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from './stores/app'
 import AppLayout from './components/AppLayout.vue'
@@ -11,12 +11,19 @@ const router = useRouter()
 const appStore = useAppStore()
 const $q = useQuasar()
 
-// ── UI Lock overlay ──────────────────────────────────────────────────────────
-// Shown every time the window is reopened from the tray.
+// ── UI Lock overlay ───────────────────────────────────────────────────────────
 const uiLocked = ref(false)
 const lockPassword = ref('')
 const lockError = ref('')
 const lockLoading = ref(false)
+const lockInputRef = ref(null)
+
+// Focus the password input whenever the lock overlay appears.
+watch(uiLocked, (val) => {
+  if (val) {
+    nextTick(() => lockInputRef.value?.focus())
+  }
+})
 
 async function unlock() {
   if (!lockPassword.value) return
@@ -37,11 +44,16 @@ async function unlock() {
   }
 }
 
-// ── Pause confirmation dialog (from tray) ────────────────────────────────────
+// ── Pause confirmation dialog ─────────────────────────────────────────────────
 const showPauseDialog = ref(false)
 const pausePassword = ref('')
 const pauseError = ref('')
 const pauseLoading = ref(false)
+const pauseInputRef = ref(null)
+
+watch(showPauseDialog, (val) => {
+  if (val) nextTick(() => pauseInputRef.value?.focus())
+})
 
 async function confirmPause() {
   if (!pausePassword.value) return
@@ -71,10 +83,15 @@ function cancelPause() {
   pauseError.value = ''
 }
 
-// ── Exit dialog (from tray) ───────────────────────────────────────────────────
+// ── Exit dialog ───────────────────────────────────────────────────────────────
 const showExitDialog = ref(false)
 const exitPassword = ref('')
 const exitError = ref('')
+const exitInputRef = ref(null)
+
+watch(showExitDialog, (val) => {
+  if (val) nextTick(() => exitInputRef.value?.focus())
+})
 
 async function confirmExit() {
   exitError.value = ''
@@ -95,39 +112,39 @@ function cancelExit() {
 onMounted(async () => {
   await appStore.loadStatus()
 
-  // Redirect to password setup if no password set (should not happen with default pwd).
   const hasPassword = await HasPassword()
   if (!hasPassword) {
     router.push('/setup')
   }
 
-  // Lock the UI every time the window is shown from the tray.
+  // Lock the UI whenever the window is reopened from the tray (set by beforeClose).
   EventsOn('window:lock-requested', () => {
     uiLocked.value = true
     lockPassword.value = ''
     lockError.value = ''
   })
 
-  // Tray "Pause" clicked — ask password before pausing.
+  // Tray "Pause" — clear lock overlay so only the pause dialog is shown.
+  // The pause dialog has its own password requirement.
   EventsOn('tray:pause-requested', () => {
+    uiLocked.value = false
+    lockPassword.value = ''
     showPauseDialog.value = true
     pausePassword.value = ''
     pauseError.value = ''
   })
 
-  // Tray "Exit" clicked — ask password before quitting.
+  // Tray "Exit" — clear lock overlay so only the exit dialog is shown.
+  // Exit is separately password-protected, lock overlay is redundant here.
   EventsOn('tray:exit-requested', () => {
+    uiLocked.value = false
+    lockPassword.value = ''
     showExitDialog.value = true
     exitPassword.value = ''
     exitError.value = ''
   })
 
-  // Navigate to settings from tray.
-  EventsOn('nav:settings', () => {
-    router.push('/settings')
-  })
-
-  // Refresh store when monitoring state changes.
+  EventsOn('nav:settings', () => router.push('/settings'))
   EventsOn('monitoring:paused',  () => appStore.loadStatus())
   EventsOn('monitoring:resumed', () => appStore.loadStatus())
 })
@@ -137,22 +154,21 @@ onMounted(async () => {
   <AppLayout />
 
   <!-- ── Full-screen lock overlay ──────────────────────────────────────────── -->
-  <!-- Covers the entire UI; appears whenever the window is reopened from the tray. -->
   <div v-if="uiLocked" class="ui-lock-overlay">
     <q-card style="width:380px" class="shadow-24">
       <q-card-section class="bg-primary text-white text-center q-pb-sm">
         <q-icon name="lock" size="36px" class="q-mb-xs" />
         <div class="text-h6">Child Monitor</div>
-        <div class="text-caption opacity-8">Enter parent password to continue</div>
+        <div class="text-caption" style="opacity:0.85">Enter parent password to continue</div>
       </q-card-section>
 
       <q-card-section class="q-pt-md">
         <q-input
+          ref="lockInputRef"
           v-model="lockPassword"
           type="password"
           label="Parent Password"
           outlined
-          autofocus
           :error="!!lockError"
           :error-message="lockError"
           @keyup.enter="unlock"
@@ -176,18 +192,20 @@ onMounted(async () => {
   <q-dialog v-model="showPauseDialog" @hide="cancelPause">
     <q-card style="min-width:340px">
       <q-card-section class="bg-warning text-white">
-        <div class="text-h6"><q-icon name="pause_circle" class="q-mr-xs" />Pause Monitoring</div>
+        <div class="text-h6">
+          <q-icon name="pause_circle" class="q-mr-xs" />Pause Monitoring
+        </div>
       </q-card-section>
       <q-card-section>
         <p class="text-body2 text-grey-7 q-mb-sm">
           Enter parent password to pause monitoring.
         </p>
         <q-input
+          ref="pauseInputRef"
           v-model="pausePassword"
           type="password"
           label="Parent Password"
           outlined
-          autofocus
           :error="!!pauseError"
           :error-message="pauseError"
           @keyup.enter="confirmPause"
@@ -213,11 +231,11 @@ onMounted(async () => {
       </q-card-section>
       <q-card-section>
         <q-input
+          ref="exitInputRef"
           v-model="exitPassword"
           type="password"
           label="Parent Password"
           outlined
-          autofocus
           :error="!!exitError"
           :error-message="exitError"
           @keyup.enter="confirmExit"
@@ -232,7 +250,6 @@ onMounted(async () => {
 </template>
 
 <style>
-/* Full-screen lock overlay — sits above all Quasar components */
 .ui-lock-overlay {
   position: fixed;
   inset: 0;
