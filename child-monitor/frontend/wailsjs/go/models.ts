@@ -50,7 +50,6 @@ export namespace models {
 	    monitoring_paused: boolean;
 	    auto_start_enabled: boolean;
 	    screenshot_folder: string;
-	    screenshot_server_url: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new AppStatus(source);
@@ -62,7 +61,6 @@ export namespace models {
 	        this.monitoring_paused = source["monitoring_paused"];
 	        this.auto_start_enabled = source["auto_start_enabled"];
 	        this.screenshot_folder = source["screenshot_folder"];
-	        this.screenshot_server_url = source["screenshot_server_url"];
 	    }
 	}
 	export class DailyAppUsage {

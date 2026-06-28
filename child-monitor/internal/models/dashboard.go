@@ -17,9 +17,8 @@ type DashboardData struct {
 }
 
 type AppStatus struct {
-	Version             string `json:"version"`
-	MonitoringPaused    bool   `json:"monitoring_paused"`
-	AutoStartEnabled    bool   `json:"auto_start_enabled"`
-	ScreenshotFolder    string `json:"screenshot_folder"`
-	ScreenshotServerURL string `json:"screenshot_server_url"`
+	Version          string `json:"version"`
+	MonitoringPaused bool   `json:"monitoring_paused"`
+	AutoStartEnabled bool   `json:"auto_start_enabled"`
+	ScreenshotFolder string `json:"screenshot_folder"`
 }

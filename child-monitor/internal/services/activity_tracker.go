@@ -11,6 +11,22 @@ import (
 	winapi "child-monitor/internal/windows"
 )
 
+func parseActivityTime(s string) time.Time {
+	formats := []string{
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04:05",
+		time.RFC3339,
+		"2006-01-02 15:04:05.999999999",
+	}
+	for _, f := range formats {
+		if t, err := time.ParseInLocation(f, s, time.Local); err == nil {
+			return t
+		}
+	}
+	logger.Warn("cannot parse activity datetime: " + s)
+	return time.Time{}
+}
+
 // InsertActivitySample records one activity sample to the database.
 func InsertActivitySample(info winapi.ActiveWindowInfo, isIdle bool, idleSeconds int) error {
 	isIdleInt := 0
@@ -63,7 +79,7 @@ func GetActivityLog(date, search string, limit, offset int) ([]models.ActivitySa
 			&s.WindowTitle, &s.WindowHandle, &isIdleInt, &s.IdleSeconds); err != nil {
 			return nil, err
 		}
-		s.SampledAt, _ = time.ParseInLocation(time.DateTime, sampledAt, time.Local)
+		s.SampledAt = parseActivityTime(sampledAt)
 		s.IsIdle = isIdleInt == 1
 		list = append(list, s)
 	}

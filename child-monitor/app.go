@@ -23,7 +23,6 @@ type App struct {
 	ctx              context.Context
 	cancelWorkers    context.CancelFunc
 	monitoringPaused bool
-	screenshotSrvURL string
 }
 
 func NewApp() *App {
@@ -41,20 +40,6 @@ func (a *App) startup(ctx context.Context) {
 	// Sync auto-start registry path in case the exe moved.
 	if err := services.SyncAutoStartPath(); err != nil {
 		logger.Warn("sync auto-start path", err)
-	}
-
-	// Start the screenshot file server.
-	screenshotFolder, _ := services.GetSetting("screenshot_folder")
-	if screenshotFolder == "" {
-		screenshotFolder = config.DefaultScreenshotDir()
-	}
-	_ = os.MkdirAll(screenshotFolder, 0755)
-
-	url, err := services.StartScreenshotServer(screenshotFolder)
-	if err != nil {
-		logger.Error("start screenshot server", err)
-	} else {
-		a.screenshotSrvURL = url
 	}
 
 	// Run initial cleanup.
@@ -108,17 +93,14 @@ func (a *App) GetAppStatus() (models.AppStatus, error) {
 		folder = config.DefaultScreenshotDir()
 	}
 	return models.AppStatus{
-		Version:             AppVersion,
-		MonitoringPaused:    a.monitoringPaused,
-		AutoStartEnabled:    autoStart,
-		ScreenshotFolder:    folder,
-		ScreenshotServerURL: a.screenshotSrvURL,
+		Version:          AppVersion,
+		MonitoringPaused: a.monitoringPaused,
+		AutoStartEnabled: autoStart,
+		ScreenshotFolder: folder,
 	}, nil
 }
 
 func (a *App) GetAppVersion() string { return AppVersion }
-
-func (a *App) GetScreenshotServerURL() string { return a.screenshotSrvURL }
 
 func (a *App) PauseMonitoring() error {
 	a.monitoringPaused = true
@@ -218,7 +200,7 @@ func (a *App) GetScreenshots(date, startTime, endTime string, limit, offset int)
 }
 
 func (a *App) GetScreenshotFileURL(filePath string) (string, error) {
-	return services.GetScreenshotFileURL(a.screenshotSrvURL, filePath), nil
+	return "/api/screenshot?path=" + filePath, nil
 }
 
 func (a *App) CaptureScreenshotNow() error {

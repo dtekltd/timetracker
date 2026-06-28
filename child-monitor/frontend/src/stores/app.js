@@ -8,7 +8,6 @@ export const useAppStore = defineStore('app', () => {
     monitoringPaused: false,
     autoStartEnabled: false,
     screenshotFolder: '',
-    screenshotServerURL: '',
   })
 
   async function loadStatus() {
@@ -29,5 +28,10 @@ export const useAppStore = defineStore('app', () => {
     status.value.monitoringPaused = false
   }
 
-  return { status, loadStatus, pause, resume }
+  // Relative URL served by the Wails asset server middleware — no CORS issue.
+  function screenshotURL(filePath) {
+    return '/api/screenshot?path=' + encodeURIComponent(filePath)
+  }
+
+  return { status, loadStatus, pause, resume, screenshotURL }
 })

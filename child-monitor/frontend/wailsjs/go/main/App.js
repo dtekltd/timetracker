@@ -50,10 +50,6 @@ export function GetScreenshotFileURL(arg1) {
   return window['go']['main']['App']['GetScreenshotFileURL'](arg1);
 }
 
-export function GetScreenshotServerURL() {
-  return window['go']['main']['App']['GetScreenshotServerURL']();
-}
-
 export function GetScreenshots(arg1, arg2, arg3, arg4, arg5) {
   return window['go']['main']['App']['GetScreenshots'](arg1, arg2, arg3, arg4, arg5);
 }

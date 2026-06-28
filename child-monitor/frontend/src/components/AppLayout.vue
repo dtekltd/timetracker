@@ -2,15 +2,10 @@
 import { useRouter, useRoute } from 'vue-router'
 import { useAppStore } from '../stores/app'
 import { computed } from 'vue'
-import PasswordDialog from './PasswordDialog.vue'
-import { ref } from 'vue'
 
 const router = useRouter()
 const route = useRoute()
 const appStore = useAppStore()
-
-const showPasswordDialog = ref(false)
-const passwordDialogAction = ref(null)
 
 const navItems = [
   { label: 'Dashboard',    icon: 'dashboard',    to: '/' },
@@ -33,8 +28,12 @@ async function toggleMonitoring() {
 </script>
 
 <template>
-  <!-- Show bare page for password setup -->
-  <router-view v-if="isHidden" />
+  <!-- Password setup: needs its own layout so q-page renders correctly -->
+  <q-layout v-if="isHidden" view="lHh Lpr lFf">
+    <q-page-container>
+      <router-view />
+    </q-page-container>
+  </q-layout>
 
   <q-layout view="lHh Lpr lFf" v-else>
     <!-- Top Bar -->

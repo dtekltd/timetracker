@@ -117,7 +117,7 @@ watch(selectedDate, load)
                   class="col-4"
                 >
                   <q-img
-                    :src="appStore.status.screenshotServerURL + '/file?path=' + encodeURIComponent(s.file_path)"
+                    :src="appStore.screenshotURL(s.file_path)"
                     ratio="16/9"
                     class="rounded-borders cursor-pointer"
                   >

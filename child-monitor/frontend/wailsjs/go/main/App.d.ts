@@ -26,8 +26,6 @@ export function GetDashboardData(arg1:string):Promise<models.DashboardData>;
 
 export function GetScreenshotFileURL(arg1:string):Promise<string>;
 
-export function GetScreenshotServerURL():Promise<string>;
-
 export function GetScreenshots(arg1:string,arg2:string,arg3:string,arg4:number,arg5:number):Promise<Array<models.Screenshot>>;
 
 export function GetSettings():Promise<Record<string, string>>;

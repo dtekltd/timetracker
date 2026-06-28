@@ -24,7 +24,7 @@ function openPreview(s) { preview.value = s; previewOpen.value = true }
 function closePreview() { previewOpen.value = false }
 
 function imgURL(s) {
-  return appStore.status.screenshotServerURL + '/file?path=' + encodeURIComponent(s.file_path)
+  return appStore.screenshotURL(s.file_path)
 }
 
 function formatTime(isoString) {

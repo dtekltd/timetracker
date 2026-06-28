@@ -189,10 +189,28 @@ func scanScreenshots(rows interface {
 			&s.FileSize, &s.Width, &s.Height, &s.DisplayIndex, &s.UploadStatus); err != nil {
 			return nil, err
 		}
-		s.CapturedAt, _ = time.ParseInLocation(time.DateTime, capturedAt, time.Local)
+		s.CapturedAt = parseDBTime(capturedAt)
 		list = append(list, s)
 	}
 	return list, rows.Err()
+}
+
+// parseDBTime tries multiple datetime formats returned by SQLite.
+func parseDBTime(s string) time.Time {
+	formats := []string{
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04:05",
+		time.RFC3339,
+		"2006-01-02 15:04:05.999999999",
+		"2006-01-02T15:04:05.999999999Z07:00",
+	}
+	for _, f := range formats {
+		if t, err := time.ParseInLocation(f, s, time.Local); err == nil {
+			return t
+		}
+	}
+	logger.Warn("cannot parse datetime from DB: " + s)
+	return time.Time{}
 }
 
 // DeleteScreenshot removes the file and database record for a screenshot.
