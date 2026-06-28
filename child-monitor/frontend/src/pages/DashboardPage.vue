@@ -116,17 +116,12 @@ watch(selectedDate, load)
                   :key="s.id"
                   class="col-4"
                 >
-                  <q-img
-                    :src="appStore.screenshotURL(s.file_path)"
-                    ratio="16/9"
-                    class="rounded-borders cursor-pointer"
-                  >
-                    <template #error>
-                      <div class="absolute-full flex flex-center bg-grey-3 text-grey-6 text-caption">
-                        No image
-                      </div>
-                    </template>
-                  </q-img>
+                  <div class="dash-thumb rounded-borders cursor-pointer" @click="router.push('/screenshots')">
+                    <img :src="appStore.screenshotURL(s.file_path)" loading="lazy" class="dash-thumb-img" alt="" />
+                    <div class="dash-thumb-caption text-caption text-white">
+                      {{ new Date(s.captured_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) }}
+                    </div>
+                  </div>
                 </div>
                 <div v-if="!data.latest_screenshots?.length" class="col-12 text-grey-5 text-caption q-pa-sm">
                   No screenshots for this date
@@ -149,3 +144,27 @@ watch(selectedDate, load)
     </template>
   </q-page>
 </template>
+
+<style scoped>
+.dash-thumb {
+  position: relative;
+  overflow: hidden;
+  background: #e0e0e0;
+  aspect-ratio: 16 / 9;
+}
+.dash-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.dash-thumb-caption {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 2px 4px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.6));
+  font-size: 11px;
+}
+</style>

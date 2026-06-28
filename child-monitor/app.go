@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"strconv"
 	"time"
 
@@ -23,6 +24,7 @@ type App struct {
 	ctx              context.Context
 	cancelWorkers    context.CancelFunc
 	monitoringPaused bool
+	allowExit        bool // set to true before runtime.Quit so beforeClose allows the quit
 }
 
 func NewApp() *App {
@@ -68,10 +70,14 @@ func (a *App) startup(ctx context.Context) {
 func (a *App) domReady(ctx context.Context) {}
 
 // beforeClose is called when the user tries to close the window.
-// Returning true cancels the close; the window is hidden instead.
+// Returns true (cancel close) unless allowExit is set, which means we
+// are quitting intentionally after password verification.
 func (a *App) beforeClose(ctx context.Context) bool {
+	if a.allowExit {
+		return false // let Wails proceed with the quit
+	}
 	runtime.Hide(ctx)
-	return true // cancel the close
+	return true // cancel the close — just hide
 }
 
 // shutdown is called when Wails is about to quit.
@@ -125,6 +131,8 @@ func (a *App) RequestExit(password string) error {
 	if !ok {
 		return fmt.Errorf("incorrect password")
 	}
+	// Set flag before Quit so OnBeforeClose allows the quit through.
+	a.allowExit = true
 	if a.cancelWorkers != nil {
 		a.cancelWorkers()
 	}
@@ -178,13 +186,12 @@ func (a *App) OpenScreenshotFolder() error {
 		folder = config.DefaultScreenshotDir()
 	}
 	_ = os.MkdirAll(folder, 0755)
-	runtime.BrowserOpenURL(a.ctx, folder)
-	return nil
+	return exec.Command("explorer", folder).Start()
 }
 
 func (a *App) OpenDataFolder() error {
-	runtime.BrowserOpenURL(a.ctx, config.AppDataDir())
-	return nil
+	_ = os.MkdirAll(config.AppDataDir(), 0755)
+	return exec.Command("explorer", config.AppDataDir()).Start()
 }
 
 // ─── Auto Start ──────────────────────────────────────────────────────────────

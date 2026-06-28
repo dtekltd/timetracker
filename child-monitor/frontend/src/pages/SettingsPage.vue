@@ -8,6 +8,9 @@ import {
   ChangePassword, CaptureScreenshotNow, CleanupOldScreenshots,
   GetAppVersion,
 } from '../../wailsjs/go/main/App'
+
+const captureLoading = ref(false)
+const cleanupLoading = ref(false)
 import PasswordDialog from '../components/PasswordDialog.vue'
 
 const $q = useQuasar()
@@ -80,6 +83,46 @@ async function changePassword() {
 function onAuthenticated() {
   authenticated.value = true
   loadSettings()
+}
+
+async function openScreenshotFolder() {
+  try {
+    await OpenScreenshotFolder()
+  } catch (e) {
+    $q.notify({ type: 'negative', message: 'Cannot open folder: ' + e })
+  }
+}
+
+async function openDataFolder() {
+  try {
+    await OpenDataFolder()
+  } catch (e) {
+    $q.notify({ type: 'negative', message: 'Cannot open folder: ' + e })
+  }
+}
+
+async function captureNow() {
+  captureLoading.value = true
+  try {
+    await CaptureScreenshotNow()
+    $q.notify({ type: 'positive', message: 'Screenshot captured successfully' })
+  } catch (e) {
+    $q.notify({ type: 'negative', message: 'Capture failed: ' + e })
+  } finally {
+    captureLoading.value = false
+  }
+}
+
+async function cleanupNow() {
+  cleanupLoading.value = true
+  try {
+    await CleanupOldScreenshots()
+    $q.notify({ type: 'positive', message: 'Old screenshots cleaned up' })
+  } catch (e) {
+    $q.notify({ type: 'negative', message: 'Cleanup failed: ' + e })
+  } finally {
+    cleanupLoading.value = false
+  }
 }
 </script>
 
@@ -184,10 +227,10 @@ function onAuthenticated() {
               />
               <div class="row q-col-gutter-sm">
                 <div class="col-6">
-                  <q-btn outline class="full-width" icon="folder" label="Screenshot Folder" @click="OpenScreenshotFolder" size="sm" />
+                  <q-btn outline class="full-width" icon="folder" label="Screenshot Folder" @click="openScreenshotFolder" size="sm" />
                 </div>
                 <div class="col-6">
-                  <q-btn outline class="full-width" icon="storage" label="Data Folder" @click="OpenDataFolder" size="sm" />
+                  <q-btn outline class="full-width" icon="storage" label="Data Folder" @click="openDataFolder" size="sm" />
                 </div>
               </div>
             </q-card-section>
@@ -219,7 +262,8 @@ function onAuthenticated() {
                   <q-btn
                     outline color="primary" class="full-width" icon="photo_camera"
                     label="Capture Screenshot Now"
-                    @click="CaptureScreenshotNow"
+                    @click="captureNow"
+                    :loading="captureLoading"
                     size="sm"
                   />
                 </div>
@@ -227,7 +271,8 @@ function onAuthenticated() {
                   <q-btn
                     outline color="warning" class="full-width" icon="cleaning_services"
                     label="Cleanup Old Screenshots Now"
-                    @click="CleanupOldScreenshots"
+                    @click="cleanupNow"
+                    :loading="cleanupLoading"
                     size="sm"
                   />
                 </div>
