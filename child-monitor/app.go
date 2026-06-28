@@ -70,12 +70,14 @@ func (a *App) startup(ctx context.Context) {
 func (a *App) domReady(ctx context.Context) {}
 
 // beforeClose is called when the user tries to close the window.
-// Returns true (cancel close) unless allowExit is set, which means we
-// are quitting intentionally after password verification.
+// Returns true (cancel close) unless allowExit is set.
+// Emits window:lock-requested so the frontend locks itself before hiding;
+// the next time the window is shown from the tray, the lock overlay appears.
 func (a *App) beforeClose(ctx context.Context) bool {
 	if a.allowExit {
 		return false // let Wails proceed with the quit
 	}
+	runtime.EventsEmit(ctx, "window:lock-requested")
 	runtime.Hide(ctx)
 	return true // cancel the close — just hide
 }
@@ -110,11 +112,13 @@ func (a *App) GetAppVersion() string { return AppVersion }
 
 func (a *App) PauseMonitoring() error {
 	a.monitoringPaused = true
+	services.UpdateTrayPausedState(true)
 	return services.SetSetting("monitoring_paused", "true")
 }
 
 func (a *App) ResumeMonitoring() error {
 	a.monitoringPaused = false
+	services.UpdateTrayPausedState(false)
 	return services.SetSetting("monitoring_paused", "false")
 }
 

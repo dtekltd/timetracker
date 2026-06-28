@@ -3,8 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAppStore } from './stores/app'
 import AppLayout from './components/AppLayout.vue'
-import PasswordDialog from './components/PasswordDialog.vue'
-import { HasPassword, RequestExit } from '../wailsjs/go/main/App'
+import { HasPassword, RequestExit, VerifyPassword, PauseMonitoring } from '../wailsjs/go/main/App'
 import { EventsOn } from '../wailsjs/runtime/runtime'
 import { useQuasar } from 'quasar'
 
@@ -12,50 +11,202 @@ const router = useRouter()
 const appStore = useAppStore()
 const $q = useQuasar()
 
+// ── UI Lock overlay ──────────────────────────────────────────────────────────
+// Shown every time the window is reopened from the tray.
+const uiLocked = ref(false)
+const lockPassword = ref('')
+const lockError = ref('')
+const lockLoading = ref(false)
+
+async function unlock() {
+  if (!lockPassword.value) return
+  lockLoading.value = true
+  lockError.value = ''
+  try {
+    const ok = await VerifyPassword(lockPassword.value)
+    if (ok) {
+      uiLocked.value = false
+      lockPassword.value = ''
+    } else {
+      lockError.value = 'Incorrect password'
+    }
+  } catch (e) {
+    lockError.value = String(e)
+  } finally {
+    lockLoading.value = false
+  }
+}
+
+// ── Pause confirmation dialog (from tray) ────────────────────────────────────
+const showPauseDialog = ref(false)
+const pausePassword = ref('')
+const pauseError = ref('')
+const pauseLoading = ref(false)
+
+async function confirmPause() {
+  if (!pausePassword.value) return
+  pauseLoading.value = true
+  pauseError.value = ''
+  try {
+    const ok = await VerifyPassword(pausePassword.value)
+    if (ok) {
+      await PauseMonitoring()
+      await appStore.loadStatus()
+      showPauseDialog.value = false
+      pausePassword.value = ''
+      $q.notify({ type: 'warning', message: 'Monitoring paused', icon: 'pause' })
+    } else {
+      pauseError.value = 'Incorrect password'
+    }
+  } catch (e) {
+    pauseError.value = String(e)
+  } finally {
+    pauseLoading.value = false
+  }
+}
+
+function cancelPause() {
+  showPauseDialog.value = false
+  pausePassword.value = ''
+  pauseError.value = ''
+}
+
+// ── Exit dialog (from tray) ───────────────────────────────────────────────────
 const showExitDialog = ref(false)
 const exitPassword = ref('')
 const exitError = ref('')
-
-onMounted(async () => {
-  await appStore.loadStatus()
-
-  // Redirect to password setup if no password has been set yet.
-  const hasPassword = await HasPassword()
-  if (!hasPassword) {
-    router.push('/setup')
-  }
-
-  // Tray requests exit -> show password dialog in frontend.
-  EventsOn('tray:exit-requested', () => {
-    showExitDialog.value = true
-  })
-
-  // Tray requests settings navigation.
-  EventsOn('nav:settings', () => {
-    router.push('/settings')
-  })
-
-  // Refresh app store on monitoring state changes.
-  EventsOn('monitoring:paused',  () => appStore.loadStatus())
-  EventsOn('monitoring:resumed', () => appStore.loadStatus())
-})
 
 async function confirmExit() {
   exitError.value = ''
   try {
     await RequestExit(exitPassword.value)
-    // App quits; we won't reach here.
   } catch (e) {
     exitError.value = String(e)
   }
 }
+
+function cancelExit() {
+  showExitDialog.value = false
+  exitPassword.value = ''
+  exitError.value = ''
+}
+
+// ── Startup ───────────────────────────────────────────────────────────────────
+onMounted(async () => {
+  await appStore.loadStatus()
+
+  // Redirect to password setup if no password set (should not happen with default pwd).
+  const hasPassword = await HasPassword()
+  if (!hasPassword) {
+    router.push('/setup')
+  }
+
+  // Lock the UI every time the window is shown from the tray.
+  EventsOn('window:lock-requested', () => {
+    uiLocked.value = true
+    lockPassword.value = ''
+    lockError.value = ''
+  })
+
+  // Tray "Pause" clicked — ask password before pausing.
+  EventsOn('tray:pause-requested', () => {
+    showPauseDialog.value = true
+    pausePassword.value = ''
+    pauseError.value = ''
+  })
+
+  // Tray "Exit" clicked — ask password before quitting.
+  EventsOn('tray:exit-requested', () => {
+    showExitDialog.value = true
+    exitPassword.value = ''
+    exitError.value = ''
+  })
+
+  // Navigate to settings from tray.
+  EventsOn('nav:settings', () => {
+    router.push('/settings')
+  })
+
+  // Refresh store when monitoring state changes.
+  EventsOn('monitoring:paused',  () => appStore.loadStatus())
+  EventsOn('monitoring:resumed', () => appStore.loadStatus())
+})
 </script>
 
 <template>
   <AppLayout />
 
-  <!-- Exit password dialog (triggered from tray) -->
-  <q-dialog v-model="showExitDialog">
+  <!-- ── Full-screen lock overlay ──────────────────────────────────────────── -->
+  <!-- Covers the entire UI; appears whenever the window is reopened from the tray. -->
+  <div v-if="uiLocked" class="ui-lock-overlay">
+    <q-card style="width:380px" class="shadow-24">
+      <q-card-section class="bg-primary text-white text-center q-pb-sm">
+        <q-icon name="lock" size="36px" class="q-mb-xs" />
+        <div class="text-h6">Child Monitor</div>
+        <div class="text-caption opacity-8">Enter parent password to continue</div>
+      </q-card-section>
+
+      <q-card-section class="q-pt-md">
+        <q-input
+          v-model="lockPassword"
+          type="password"
+          label="Parent Password"
+          outlined
+          autofocus
+          :error="!!lockError"
+          :error-message="lockError"
+          @keyup.enter="unlock"
+        />
+      </q-card-section>
+
+      <q-card-actions class="q-px-md q-pb-md">
+        <q-btn
+          color="primary"
+          label="Unlock"
+          class="full-width"
+          size="lg"
+          :loading="lockLoading"
+          @click="unlock"
+        />
+      </q-card-actions>
+    </q-card>
+  </div>
+
+  <!-- ── Pause confirmation dialog ─────────────────────────────────────────── -->
+  <q-dialog v-model="showPauseDialog" @hide="cancelPause">
+    <q-card style="min-width:340px">
+      <q-card-section class="bg-warning text-white">
+        <div class="text-h6"><q-icon name="pause_circle" class="q-mr-xs" />Pause Monitoring</div>
+      </q-card-section>
+      <q-card-section>
+        <p class="text-body2 text-grey-7 q-mb-sm">
+          Enter parent password to pause monitoring.
+        </p>
+        <q-input
+          v-model="pausePassword"
+          type="password"
+          label="Parent Password"
+          outlined
+          autofocus
+          :error="!!pauseError"
+          :error-message="pauseError"
+          @keyup.enter="confirmPause"
+        />
+      </q-card-section>
+      <q-card-actions align="right">
+        <q-btn flat label="Cancel" @click="cancelPause" />
+        <q-btn
+          color="warning"
+          label="Pause"
+          :loading="pauseLoading"
+          @click="confirmPause"
+        />
+      </q-card-actions>
+    </q-card>
+  </q-dialog>
+
+  <!-- ── Exit password dialog ───────────────────────────────────────────────── -->
+  <q-dialog v-model="showExitDialog" @hide="cancelExit">
     <q-card style="min-width:320px">
       <q-card-section class="bg-primary text-white">
         <div class="text-h6">Exit Child Monitor</div>
@@ -65,6 +216,7 @@ async function confirmExit() {
           v-model="exitPassword"
           type="password"
           label="Parent Password"
+          outlined
           autofocus
           :error="!!exitError"
           :error-message="exitError"
@@ -72,9 +224,23 @@ async function confirmExit() {
         />
       </q-card-section>
       <q-card-actions align="right">
-        <q-btn flat label="Cancel" v-close-popup @click="exitPassword = ''; exitError = ''" />
+        <q-btn flat label="Cancel" @click="cancelExit" />
         <q-btn color="negative" label="Exit App" @click="confirmExit" />
       </q-card-actions>
     </q-card>
   </q-dialog>
 </template>
+
+<style>
+/* Full-screen lock overlay — sits above all Quasar components */
+.ui-lock-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.82);
+  backdrop-filter: blur(6px);
+}
+</style>

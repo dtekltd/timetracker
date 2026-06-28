@@ -6,19 +6,22 @@ import (
 	"github.com/getlantern/systray"
 )
 
-// TrayCallbacks holds functions provided by the App layer so the tray can
-// trigger UI actions without importing Wails runtime directly.
+// TrayCallbacks holds functions provided by the App layer.
 type TrayCallbacks struct {
-	OnShow          func()
-	OnPause         func()
-	OnResume        func()
-	OnOpenSettings  func()
-	OnExit          func()
-	IsPaused        func() bool
+	OnShow         func()
+	OnPauseRequest func() // request pause — frontend handles password
+	OnResume       func() // direct resume, no password needed
+	OnOpenSettings func()
+	OnExit         func()
 }
 
-// RunTray starts the system tray. This blocks until systray.Quit() is called.
-// It must be run from the main goroutine (or a dedicated goroutine on Windows).
+// package-level menu item references so UpdateTrayPausedState can toggle them.
+var (
+	trayPauseItem  *systray.MenuItem
+	trayResumeItem *systray.MenuItem
+)
+
+// RunTray starts the system tray. Blocks until QuitTray() is called.
 func RunTray(iconData []byte, cb TrayCallbacks) {
 	systray.Run(func() {
 		onTrayReady(iconData, cb)
@@ -32,16 +35,42 @@ func QuitTray() {
 	systray.Quit()
 }
 
+// UpdateTrayPausedState syncs the tray tooltip and menu items with the actual
+// monitoring state. Called by PauseMonitoring / ResumeMonitoring in app.go.
+func UpdateTrayPausedState(paused bool) {
+	if paused {
+		systray.SetTooltip("Child Monitor — Paused")
+		if trayPauseItem != nil {
+			trayPauseItem.Hide()
+		}
+		if trayResumeItem != nil {
+			trayResumeItem.Show()
+		}
+	} else {
+		systray.SetTooltip("Child Monitor — Running")
+		if trayResumeItem != nil {
+			trayResumeItem.Hide()
+		}
+		if trayPauseItem != nil {
+			trayPauseItem.Show()
+		}
+	}
+}
+
 func onTrayReady(iconData []byte, cb TrayCallbacks) {
 	systray.SetIcon(iconData)
 	systray.SetTitle("Child Monitor")
 	systray.SetTooltip("Child Monitor — Running")
 
-	mOpen := systray.AddMenuItem("Open Dashboard", "Show the main window")
+	mOpen := systray.AddMenuItem("Open Dashboard", "Show the main window (password required)")
 	systray.AddSeparator()
-	mPause := systray.AddMenuItem("Pause Monitoring", "Stop capturing screenshots and activity")
+
+	mPause := systray.AddMenuItem("Pause Monitoring", "Pause monitoring (password required)")
 	mResume := systray.AddMenuItem("Resume Monitoring", "Resume monitoring")
 	mResume.Hide()
+	trayPauseItem = mPause
+	trayResumeItem = mResume
+
 	systray.AddSeparator()
 	mSettings := systray.AddMenuItem("Settings", "Open settings (password required)")
 	systray.AddSeparator()
@@ -55,19 +84,14 @@ func onTrayReady(iconData []byte, cb TrayCallbacks) {
 					cb.OnShow()
 				}
 			case <-mPause.ClickedCh:
-				if cb.OnPause != nil {
-					cb.OnPause()
+				// Don't pause directly — emit event so frontend asks for password.
+				if cb.OnPauseRequest != nil {
+					cb.OnPauseRequest()
 				}
-				mPause.Hide()
-				mResume.Show()
-				systray.SetTooltip("Child Monitor — Paused")
 			case <-mResume.ClickedCh:
 				if cb.OnResume != nil {
 					cb.OnResume()
 				}
-				mResume.Hide()
-				mPause.Show()
-				systray.SetTooltip("Child Monitor — Running")
 			case <-mSettings.ClickedCh:
 				if cb.OnOpenSettings != nil {
 					cb.OnOpenSettings()
@@ -79,13 +103,4 @@ func onTrayReady(iconData []byte, cb TrayCallbacks) {
 			}
 		}
 	}()
-}
-
-// UpdateTrayPausedState updates the tray tooltip and menu item visibility.
-func UpdateTrayPausedState(paused bool) {
-	if paused {
-		systray.SetTooltip("Child Monitor — Paused")
-	} else {
-		systray.SetTooltip("Child Monitor — Running")
-	}
 }
