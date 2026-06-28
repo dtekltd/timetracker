@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { GetScreenshots, DeleteScreenshot } from '../../wailsjs/go/main/App'
 import { useAppStore } from '../stores/app'
 import { useQuasar } from 'quasar'
@@ -17,11 +17,24 @@ const offset = ref(0)
 const limit = 50
 const hasMore = ref(false)
 
-const preview = ref(null)
+// Preview state
+const previewIndex = ref(-1)
 const previewOpen = ref(false)
+const preview = computed(() => screenshots.value[previewIndex.value] ?? null)
 
-function openPreview(s) { preview.value = s; previewOpen.value = true }
-function closePreview() { previewOpen.value = false }
+function openPreview(idx) {
+  previewIndex.value = idx
+  previewOpen.value = true
+}
+function closePreview() {
+  previewOpen.value = false
+}
+function prevPhoto() {
+  if (previewIndex.value > 0) previewIndex.value--
+}
+function nextPhoto() {
+  if (previewIndex.value < screenshots.value.length - 1) previewIndex.value++
+}
 
 function imgURL(s) {
   return appStore.screenshotURL(s.file_path)
@@ -29,7 +42,16 @@ function imgURL(s) {
 
 function formatTime(isoString) {
   if (!isoString) return ''
-  return new Date(isoString).toLocaleString()
+  const d = new Date(isoString)
+  if (isNaN(d)) return isoString
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+}
+
+function formatDateTime(isoString) {
+  if (!isoString) return ''
+  const d = new Date(isoString)
+  if (isNaN(d)) return isoString
+  return d.toLocaleString()
 }
 
 async function load(reset = false) {
@@ -63,9 +85,15 @@ async function remove(s) {
     message: `Delete ${s.file_name}?`,
     cancel: true,
   }).onOk(async () => {
-    await DeleteScreenshot(s.id)
-    screenshots.value = screenshots.value.filter(x => x.id !== s.id)
-    if (preview.value?.id === s.id) preview.value = null
+    const id = s.id
+    await DeleteScreenshot(id)
+    const idx = screenshots.value.findIndex(x => x.id === id)
+    if (idx !== -1) screenshots.value.splice(idx, 1)
+    // Adjust preview index after deletion
+    if (previewIndex.value >= screenshots.value.length) {
+      previewIndex.value = screenshots.value.length - 1
+    }
+    if (screenshots.value.length === 0) closePreview()
     $q.notify({ type: 'positive', message: 'Screenshot deleted' })
   })
 }
@@ -96,23 +124,29 @@ onMounted(() => load(true))
     <!-- Grid -->
     <div v-if="screenshots.length" class="row q-col-gutter-sm">
       <div
-        v-for="s in screenshots"
+        v-for="(s, idx) in screenshots"
         :key="s.id"
         class="col-6 col-sm-4 col-md-3 col-lg-2"
       >
-        <q-card flat bordered class="cursor-pointer" @click="openPreview(s)">
-          <q-img :src="imgURL(s)" ratio="16/9">
-            <template #error>
-              <div class="absolute-full flex flex-center bg-grey-3 text-grey-5 text-caption">No image</div>
-            </template>
-          </q-img>
-          <q-card-section class="q-pa-xs">
-            <div class="text-caption text-grey-7">{{ formatTime(s.captured_at) }}</div>
-            <div v-if="s.display_index > 0" class="text-caption text-grey-5">
+        <!-- Thumbnail card with caption overlay -->
+        <div
+          class="screenshot-thumb cursor-pointer rounded-borders"
+          @click="openPreview(idx)"
+        >
+          <img
+            :src="imgURL(s)"
+            loading="lazy"
+            class="thumb-img"
+            alt=""
+          />
+          <!-- Caption overlay at bottom of thumbnail -->
+          <div class="thumb-caption">
+            <div class="text-caption text-white">{{ formatTime(s.captured_at) }}</div>
+            <div v-if="s.display_index > 0" class="text-caption" style="opacity:0.75;color:#ddd">
               Display {{ s.display_index }}
             </div>
-          </q-card-section>
-        </q-card>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -124,30 +158,106 @@ onMounted(() => load(true))
       <q-btn flat label="Load More" @click="load(false)" :loading="loading" />
     </div>
 
-    <!-- Preview Dialog -->
-    <q-dialog v-model="previewOpen" maximized>
-      <q-card v-if="preview">
-        <q-bar class="bg-primary text-white">
-          <span>{{ preview.file_name }}</span>
+    <!-- Preview Dialog with prev/next navigation -->
+    <q-dialog v-model="previewOpen" maximized transition-show="fade" transition-hide="fade">
+      <q-card v-if="preview" class="column no-wrap" style="background:#111">
+        <!-- Title bar -->
+        <q-bar class="bg-dark text-white q-px-md" style="min-height:42px">
+          <span class="text-caption ellipsis">{{ preview.file_name }}</span>
           <q-space />
-          <q-btn dense flat icon="close" @click="closePreview" />
+          <span class="text-caption text-grey-5 q-mr-md">
+            {{ previewIndex + 1 }} / {{ screenshots.length }}
+          </span>
+          <q-btn dense flat round icon="close" color="white" @click="closePreview" />
         </q-bar>
-        <q-card-section class="flex flex-center q-pa-md" style="max-height:80vh; overflow:auto">
-          <q-img
+
+        <!-- Image area with prev/next overlay buttons -->
+        <div class="col relative-position flex flex-center" style="overflow:hidden;min-height:0">
+          <img
             :src="imgURL(preview)"
-            style="max-width:100%; max-height:70vh"
-            fit="contain"
+            style="max-width:100%; max-height:100%; object-fit:contain; display:block"
+            alt=""
           />
-        </q-card-section>
-        <q-card-section>
-          <div class="text-caption">{{ formatTime(preview.captured_at) }}</div>
-          <div class="text-caption text-grey-6">{{ preview.file_path }}</div>
-        </q-card-section>
-        <q-card-actions align="right">
-          <q-btn flat icon="delete" color="negative" label="Delete" @click="remove(preview)" />
-          <q-btn flat label="Close" @click="closePreview" />
-        </q-card-actions>
+
+          <!-- Previous button -->
+          <q-btn
+            v-if="previewIndex > 0"
+            round
+            color="dark"
+            icon="chevron_left"
+            class="preview-nav preview-nav-left"
+            @click="prevPhoto"
+            size="lg"
+          />
+
+          <!-- Next button -->
+          <q-btn
+            v-if="previewIndex < screenshots.length - 1"
+            round
+            color="dark"
+            icon="chevron_right"
+            class="preview-nav preview-nav-right"
+            @click="nextPhoto"
+            size="lg"
+          />
+        </div>
+
+        <!-- Footer bar -->
+        <q-bar class="bg-dark text-white q-px-md" style="min-height:48px">
+          <div>
+            <div class="text-caption text-white">{{ formatDateTime(preview.captured_at) }}</div>
+            <div class="text-caption text-grey-5">{{ preview.file_path }}</div>
+          </div>
+          <q-space />
+          <q-btn
+            flat
+            round
+            icon="delete"
+            color="negative"
+            @click="remove(preview)"
+            title="Delete"
+          />
+        </q-bar>
       </q-card>
     </q-dialog>
   </q-page>
 </template>
+
+<style scoped>
+/* Thumbnail container — fixed-ratio image box */
+.screenshot-thumb {
+  position: relative;
+  overflow: hidden;
+  background: #e0e0e0;
+  aspect-ratio: 16 / 9;
+}
+
+.thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Semi-transparent caption at the bottom of each thumbnail */
+.thumb-caption {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 4px 6px;
+  background: linear-gradient(transparent, rgba(0,0,0,0.65));
+  pointer-events: none;
+}
+
+/* Prev / next overlay buttons */
+.preview-nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  opacity: 0.75;
+}
+.preview-nav:hover { opacity: 1; }
+.preview-nav-left  { left: 16px; }
+.preview-nav-right { right: 16px; }
+</style>
