@@ -2,7 +2,21 @@
   "permissions": {
     "allow": [
       "Bash(git add *)",
-      "Bash(git commit -m ' *)"
+      "Bash(git commit -m ' *)",
+      "Bash(go version *)",
+      "Bash(wails version *)",
+      "Bash(npm --version)",
+      "Bash(go install *)",
+      "Bash(wails init *)",
+      "Bash(go get *)",
+      "Bash(go build *)",
+      "Bash(npm install *)",
+      "Bash(wails generate *)",
+      "Bash(npm run *)",
+      "Bash(grep -v \"^$\")",
+      "Bash(Select-String -Path \"E:\\\\Working\\\\timetracker\\\\child-monitor\\\\frontend\\\\src\\\\pages\\\\DashboardPage.vue\" -Pattern \"^</template>\")",
+      "Bash(Select-Object -Last 1)",
+      "Bash(cd \"E:\\\\Working\\\\timetracker\\\\child-monitor\\\\frontend\" && npm run build 2>&1 | tail -6 && cd .. && go build -o child-monitor.exe . 2>&1)"
     ]
   }
 }
